@@ -95,23 +95,20 @@ export default {
     }
   },
 
-  mounted: async function() {
+  mounted: function() {
     const options = {};
-    if (this.types) options.types = [this.types];
-    if (this.country) options.componentRestrictions = { country: this.country === null ? [] : this.country };
-    if (this.fields && this.fields.length) options.fields = this.fields;
-
-    // Load the new Places library and create the autocomplete element
-    await google.maps.importLibrary('places');
+    if (this.types)  options.types  = [ this.types ];
+    if (this.country) options.componentRestrictions = { country: this.country };
+  
     this.autocompleteEl = new google.maps.places.PlaceAutocompleteElement(options);
-    this.autocomplete = this.autocompleteEl; // alias for backward compatibility
+    this.autocomplete = this.autocompleteEl;
     this.$refs.autocompleteContainer.appendChild(this.autocompleteEl);
-
-    // Listen for selection events and fetch full place details
+  
     this.autocompleteEl.addEventListener('gmp-select', async (e) => {
-      const place = e.placePrediction.toPlace();
-      await place.fetchFields({ fields: this.fields && this.fields.length ? this.fields : BASIC_DATA_FIELDS });
-      this.$emit('placechanged', place, e.placePrediction, this.id);
+      const prediction = e.placePrediction;
+      const place = prediction.toPlace();
+      await place.fetchFields({ fields: this.fields });
+      this.$emit('placechanged', place, prediction, this.id);
     });
   },
 

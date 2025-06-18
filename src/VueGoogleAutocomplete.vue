@@ -140,10 +140,18 @@ export default {
 
       const place = pred.toPlace();
       // конвертация имен полей в camelCase для нового API
+// конвертация имен полей в camelCase для нового API с учётом специальных случаев
 const fieldsToRequest = this.fields.map(field => {
-  if (field === 'geometry') return 'location';
-  return field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-});
+  switch(field) {
+    case 'geometry':
+      return 'location';
+    case 'url':
+      return 'websiteUri';
+    default:
+      // преобразовать snake_case в camelCase
+      return field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  }
+});;
 await place.fetchFields({ fields: fieldsToRequest });;
       const data = this.formatResult(place);
       this.$emit('placechanged', data, place, this.id);

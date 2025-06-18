@@ -23,7 +23,7 @@
         v-for="(sugg, idx) in predictions"
         :key="sugg.placePrediction.placeId"
         :class="['dropdown-item', { active: idx === highlightedIndex }]"
-        @mousedown.prevent="select(sugg)"
+        @click.prevent="select(sugg)"
       >
         {{ sugg.placePrediction.text
             ? sugg.placePrediction.text.toString()
@@ -222,7 +222,7 @@ export default {
   background: #fff;
   border: 1px solid #dadce0;
   border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(32,33,36,.28);
+  box-shadow: 0 2px 6px rgba(32, 33, 36, .28);
   font-family: Roboto, Arial, sans-serif;
   font-size: 16px;
   margin-top: 4px;
@@ -230,6 +230,7 @@ export default {
   position: absolute;
   width: 100%;
   z-index: 1000;
+  overflow: hidden;
 }
 
 .vue-google-autocomplete .dropdown-item {
@@ -240,11 +241,15 @@ export default {
   cursor: pointer;
   color: #3c4043;
   line-height: 20px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
+/* маркер-иконка слева */
 .vue-google-autocomplete .dropdown-item::before {
   content: '';
-  display: inline-block;
+  flex: none;
   width: 20px;
   height: 20px;
   margin-right: 12px;
@@ -252,11 +257,13 @@ export default {
   background-size: 20px 20px;
 }
 
+/* hover и текущий пункт */
 .vue-google-autocomplete .dropdown-item:hover,
 .vue-google-autocomplete .dropdown-item.active {
   background-color: #f1f3f4;
 }
 
+/* «powered by Google» внизу */
 .vue-google-autocomplete .dropdown-menu::after {
   content: 'powered by Google';
   display: block;

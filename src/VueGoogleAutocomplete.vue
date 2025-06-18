@@ -210,3 +210,50 @@ export default {
   }
 };
 </script>
+
+.vue-google-autocomplete .dropdown-menu {
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(32,33,36,.28);
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 16px;
+  margin-top: 4px;
+  padding: 0;
+  position: absolute;
+  width: 100%;
+  z-index: 1000;
+}
+
+.vue-google-autocomplete .dropdown-item {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 16px;
+  cursor: pointer;
+  color: #3c4043;
+  line-height: 20px;
+}
+
+.vue-google-autocomplete .dropdown-item::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  margin-right: 12px;
+  background-image: url("data:image/svg+xml;charset=UTF-8,<svg fill='%23666' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z'/><circle cx='12' cy='9' fill='%23fff' r='2.5'/></svg>");
+  background-size: 20px 20px;
+}
+
+.vue-google-autocomplete .dropdown-item:hover,
+.vue-google-autocomplete .dropdown-item.active {
+  background-color: #f1f3f4;
+}
+.vue-google-autocomplete .dropdown-menu::after {
+  content: 'powered by Google';
+  display: block;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #70757a;
+  text-align: right;
+}

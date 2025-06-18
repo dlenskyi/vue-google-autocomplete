@@ -1,364 +1,165 @@
 <template>
-  <div ref="container"></div>
+  <div class="vue-google-autocomplete" style="position: relative;">
+    <input
+      ref="autocomplete"
+      type="text"
+      :class="classname"
+      :id="id"
+      :placeholder="placeholder"
+      :disabled="disabled"
+      v-model="autocompleteText"
+      @focus="onFocus"
+      @blur="onBlur"
+      @input="onInput"
+      @keydown.down.prevent="highlight(1)"
+      @keydown.up.prevent="highlight(-1)"
+      @keydown.enter.prevent="selectHighlighted"
+    />
+    <ul v-if="predictions.length" class="dropdown-menu show" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; z-index: 1000;">
+      <li
+        v-for="(p, idx) in predictions"
+        :key="p.place_id"
+        :class="['dropdown-item', { active: idx === highlightedIndex }]"
+        @mousedown.prevent="select(p)"
+      >
+        {{ p.description }}
+      </li>
+    </ul>
+  </div>
 </template>
 
 <script>
-    const ADDRESS_COMPONENTS = {
-        subpremise : 'short_name',
-        street_number: 'short_name',
-        route: 'long_name',
-        locality: 'long_name',
-        administrative_area_level_1: 'short_name',
-        administrative_area_level_2: 'long_name',
-        country: 'long_name',
-        postal_code: 'short_name'
+const ADDRESS_COMPONENTS = {
+  subpremise: 'short_name',
+  street_number: 'short_name',
+  route: 'long_name',
+  locality: 'long_name',
+  administrative_area_level_1: 'short_name',
+  administrative_area_level_2: 'long_name',
+  country: 'long_name',
+  postal_code: 'short_name'
+};
+
+export default {
+  name: 'VueGoogleAutocomplete',
+
+  props: {
+    id: { type: String, required: true },
+    classname: String,
+    placeholder: { type: String, default: 'Start typing' },
+    disabled: { type: Boolean, default: false },
+    types: { type: String, default: 'address' },
+    fields: { type: Array, default: () => ['address_components','formatted_address','geometry'] },
+    country: { type: [String, Array], default: null },
+    enableGeolocation: { type: Boolean, default: false },
+    geolocationOptions: { type: Object, default: null }
+  },
+
+  data() {
+    return {
+      autocompleteText: '',
+      predictions: [],
+      highlightedIndex: -1,
+      autocompleteService: null,
+      placesService: null
     };
+  },
 
-    const CITIES_TYPE = ['locality', 'administrative_area_level_3'];
-    const REGIONS_TYPE = ['locality', 'sublocality', 'postal_code', 'country',
-        'administrative_area_level_1', 'administrative_area_level_2'];
+  mounted() {
+    // Инициализация сервисов после загрузки Google Maps JS
+    this.autocompleteService = new window.google.maps.places.AutocompleteService();
+    this.placesService = new window.google.maps.places.PlacesService(document.createElement('div'));
+  },
 
-    /*
-      By default, we're only including basic place data because requesting these 
-      fields place data is not additionally charged by Google. Please refer to:
-
-      https://developers.google.com/maps/billing/understanding-cost-of-use#basic-data
-    */
-    const BASIC_DATA_FIELDS = ['address_components', 'adr_address', 'alt_id', 
-        'formatted_address', 'geometry', 'icon', 'id', 'name', 
-        'business_status', 'photo', 'place_id', 'scope', 'type', 'url', 
-        'utc_offset_minutes', 'vicinity'];
-
-    export default {
-        name: 'VueGoogleAutocomplete',
-
-        props: {
-          id: {
-            type: String,
-            required: true
-          },
-
-          classname: String,
-
-          placeholder: {
-            type: String,
-            default: 'Start typing'
-          },
-
-          disabled: {
-            type: Boolean,
-            default: false
-          },
-
-          types: {
-            type: String,
-            default: 'address'
-          },
-
-          fields: {
-            type: Array,
-            default: function() {
-              return BASIC_DATA_FIELDS;
-            },
-          },
-
-          country: {
-            type: [String, Array],
-            default: null
-          },
-
-          enableGeolocation: {
-            type: Boolean,
-            default: false
-          },
-
-          geolocationOptions: {
-            type: Object,
-            default: null
-          }
-        },
-
-        data() {
-            return {
-                /**
-                 * The Autocomplete object.
-                 *
-                 * @type {Autocomplete}
-                 * @link https://developers.google.com/maps/documentation/javascript/reference#Autocomplete
-                 */
-                autocomplete: null,
-
-                /**
-                 * Autocomplete input text
-                 * @type {String}
-                 */
-                autocompleteText: '',
-
-                geolocation: {
-                    /**
-                     * Google Geocoder Objet
-                     * @type {Geocoder}
-                     * @link https://developers.google.com/maps/documentation/javascript/reference#Geocoder
-                     */
-                    geocoder: null,
-
-                    /**
-                     * Filled after geolocate result
-                     * @type {Coordinates}
-                     * @link https://developer.mozilla.org/en-US/docs/Web/API/Coordinates
-                     */
-                    loc: null,
-
-                    /**
-                     * Filled after geolocate result
-                     * @type {Position}
-                     * @link https://developer.mozilla.org/en-US/docs/Web/API/Position
-                     */
-                    position: null
-                }
-            }
-        },
-
-        watch: {
-            autocompleteText: function (newVal, oldVal) {
-	            this.$emit('inputChange', { newVal, oldVal }, this.id);
-            },
-            country: function(newVal, oldVal) {
-              this.autocomplete.setComponentRestrictions({
-                country: this.country === null ? [] : this.country
-              });
-            }
-        },
-
-        async mounted() {
-        await new Promise(resolve => {
-          if (window.google && google.maps.places) resolve();
-          window.initGoogleMaps = resolve;
-        });
-      
-        this.placeAutocomplete = new google.maps.places.PlaceAutocompleteElement({
-          componentRestrictions: this.country ? { country: this.country } : undefined,
-          types: this.types ? [this.types] : undefined,
-        });
-      
-        this.placeAutocomplete.id = this.id;
-      
-        this.$refs.container.appendChild(this.placeAutocomplete);
-      
-        this.placeAutocomplete.addEventListener('gmp-select', async (event) => {
-          const place = event.placePrediction.toPlace();
-          await place.fetchFields({ fields: this.fields });
-          const result = this.formatResult(place);
-          this.$emit('placechanged', result, place, this.id);
-          this.autocompleteText = place.displayName || place.formattedAddress;
-          this.$emit('change', this.autocompleteText);
-        });
-      },
-        methods: {
-            /**
-             * When a place changed
-             */
-            onPlaceChanged() {
-                let place = this.autocomplete.getPlace();
-
-                if (!place.geometry) {
-                  // User entered the name of a Place that was not suggested and
-                  // pressed the Enter key, or the Place Details request failed.
-                  this.$emit('no-results-found', place, this.id);
-                  return;
-                }
-
-                if (place.address_components !== undefined) {
-                    // return returnData object and PlaceResult object
-                    this.$emit('placechanged', this.formatResult(place), place, this.id);
-
-                    // update autocompleteText then emit change event
-                    this.autocompleteText = document.getElementById(this.id).value
-                    this.onChange()
-                }
-            },
-
-            /**
-             * When the input gets focus
-             */
-            onFocus() {
-              this.biasAutocompleteLocation();
-              this.$emit('focus');
-            },
-
-            /**
-             * When the input loses focus
-             */
-            onBlur() {
-              this.$emit('blur');
-            },
-
-            /**
-             * When the input got changed
-             */
-            onChange() {
-              this.$emit('change', this.autocompleteText);
-            },
-
-            /**
-             * When a key gets pressed
-             * @param  {Event} event A keypress event
-             */
-            onKeyPress(event) {
-              this.$emit('keypress', event);
-            },
-
-            /**
-             * When a keyup occurs
-             * @param  {Event} event A keyup event
-             */
-            onKeyUp(event) {
-              this.$emit('keyup', event);
-            },
-
-            /**
-             * Clear the input
-             */
-            clear() {
-              this.autocompleteText = ''
-            },
-
-            /**
-             * Focus the input
-             */
-            focus() {
-              this.$refs.autocomplete.focus()
-            },
-
-            /**
-             * Blur the input
-             */
-            blur() {
-              this.$refs.autocomplete.blur()
-            },
-
-            /**
-             * Update the value of the input
-             * @param  {String} value
-             */
-            update (value) {
-              this.autocompleteText = value
-            },
-
-            /**
-             * Update the coordinates of the input
-             * @param  {Coordinates} value
-             */
-            updateCoordinates (value) {
-                if (!value && !(value.lat || value.lng)) return;
-                if (!this.geolocation.geocoder) this.geolocation.geocoder = new google.maps.Geocoder();
-                this.geolocation.geocoder.geocode({'location': value}, (results, status) => {
-                    if (status === 'OK') {
-                        results = this.filterGeocodeResultTypes(results);
-                        if (results[0]) {
-                            this.$emit('placechanged', this.formatResult(results[0]), results[0], this.id);
-                            this.update(results[0].formatted_address);
-                        } else {
-                            this.$emit('error', 'no result for provided coordinates');
-                        }
-                    } else {
-                        this.$emit('error', 'error getting address from coords');
-                    }
-                })
-            },
-
-            /**
-             * Update location based on navigator geolocation
-             */
-            geolocate () {
-                this.updateGeolocation ((geolocation, position) => {
-                    this.updateCoordinates(geolocation)
-                })
-            },
-
-            /**
-             * Update internal location from navigator geolocation
-             * @param  {Function} (geolocation, position)
-             */
-            updateGeolocation (callback = null) {
-                if (navigator.geolocation) {
-                    let options = {};
-                    if(this.geolocationOptions) Object.assign(options, this.geolocationOptions);
-                    navigator.geolocation.getCurrentPosition(position => {
-                        let geolocation = {
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        };
-                        this.geolocation.loc = geolocation;
-                        this.geolocation.position = position;
-
-                        if (callback) callback(geolocation, position);
-                    }, err => {
-                        this.$emit('error', 'Cannot get Coordinates from navigator', err);
-                    }, options);
-                }
-            },
-
-
-            // Bias the autocomplete object to the user's geographical location,
-            // as supplied by the browser's 'navigator.geolocation' object.
-            biasAutocompleteLocation () {
-                if (this.enableGeolocation) {
-                    this.updateGeolocation((geolocation, position) => {
-                        let circle = new google.maps.Circle({
-                            center: geolocation,
-                            radius: position.coords.accuracy
-                        });
-                        this.autocomplete.setBounds(circle.getBounds());
-                    })
-                }
-            },
-
-            /**
-             * Format result from Geo google APIs
-             * @param place
-             * @returns {{formatted output}}
-             */
-            formatResult (place) {
-                let returnData = {};
-                for (let i = 0; i < place.address_components.length; i++) {
-                    let addressType = place.address_components[i].types[0];
-
-                    if (ADDRESS_COMPONENTS[addressType]) {
-                        let val = place.address_components[i][ADDRESS_COMPONENTS[addressType]];
-                        returnData[addressType] = val;
-                    }
-                }
-
-                returnData['latitude'] = place.geometry.location.lat();
-                returnData['longitude'] = place.geometry.location.lng();
-                return returnData
-            },
-
-            /**
-             * Extract configured types out of raw result as
-             * Geocode API does not allow to do it
-             * @param results
-             * @returns {GeocoderResult}
-             * @link https://developers.google.com/maps/documentation/javascript/reference#GeocoderResult
-             */
-            filterGeocodeResultTypes (results) {
-                if (!results || !this.types) return results;
-                let output = [];
-                let types = [this.types];
-                if (types.includes('(cities)')) types = types.concat(CITIES_TYPE);
-                if (types.includes('(regions)')) types = types.concat(REGIONS_TYPE);
-
-                for (let r of results) {
-                    for (let t of r.types) {
-                        if (types.includes(t)) {
-                            output.push(r);
-                            break;
-                        }
-                    }
-                }
-                return output;
-            }
+  methods: {
+    onInput() {
+      const input = this.autocompleteText;
+      if (!input) {
+        this.predictions = [];
+        return;
+      }
+      const opts = { input, types: [this.types] };
+      if (this.country) opts.componentRestrictions = { country: this.country };
+      this.autocompleteService.getPlacePredictions(opts, (preds, status) => {
+        if (status === window.google.maps.places.PlacesServiceStatus.OK) {
+          this.predictions = preds;
+          this.highlightedIndex = -1;
+        } else {
+          this.predictions = [];
         }
+      });
+      this.$emit('inputChange', { newVal: input }, this.id);
+    },
+
+    highlight(delta) {
+      const len = this.predictions.length;
+      let idx = this.highlightedIndex + delta;
+      if (idx < 0) idx = len - 1;
+      if (idx >= len) idx = 0;
+      this.highlightedIndex = idx;
+    },
+
+    selectHighlighted() {
+      if (this.highlightedIndex >= 0) {
+        this.select(this.predictions[this.highlightedIndex]);
+      }
+    },
+
+    select(prediction) {
+      this.autocompleteText = prediction.description;
+      this.predictions = [];
+      this.$emit('change', this.autocompleteText);
+
+      // Получаем детали места
+      this.placesService.getDetails({
+        placeId: prediction.place_id,
+        fields: this.fields,
+      }, (place, status) => {
+        if (status === window.google.maps.places.PlacesServiceStatus.OK) {
+          const data = this.formatResult(place);
+          this.$emit('placechanged', data, place, this.id);
+        } else {
+          this.$emit('error', status);
+        }
+      });
+    },
+
+    onFocus() {
+      this.$emit('focus');
+      if (this.enableGeolocation) this.geolocate();
+    },
+
+    onBlur() {
+      setTimeout(() => { this.predictions = []; }, 200);
+      this.$emit('blur');
+    },
+
+    geolocate() {
+      if (navigator.geolocation) {
+        const options = this.geolocationOptions || {};
+        navigator.geolocation.getCurrentPosition(pos => {
+          const geoloc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          const circle = new window.google.maps.Circle({ center: geoloc, radius: pos.coords.accuracy });
+          // Можно использовать для ограничения поиска
+        }, err => this.$emit('error', err));
+      }
+    },
+
+    formatResult(place) {
+      const rtn = {};
+      if (place.address_components) {
+        place.address_components.forEach(comp => {
+          const type = comp.types[0];
+          if (ADDRESS_COMPONENTS[type]) rtn[type] = comp[ADDRESS_COMPONENTS[type]];
+        });
+      }
+      if (place.geometry && place.geometry.location) {
+        rtn.latitude = place.geometry.location.lat();
+        rtn.longitude = place.geometry.location.lng();
+      }
+      rtn.formatted_address = place.formatted_address || '';
+      return rtn;
     }
+  }
+};
 </script>

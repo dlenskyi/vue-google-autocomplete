@@ -19,7 +19,7 @@
     "fork"
   ],
   "scripts": {
-    "test": "NODE_PATH=test ava --verbose",
+    "test": "NODE_PATH=test ava --verbose"
   },
   "ava": {
     "require": [

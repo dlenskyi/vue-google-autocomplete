@@ -66,12 +66,19 @@ export default {
   },
 
   mounted() {
-    // Инициализация сервисов после загрузки Google Maps JS
     this.autocompleteService = new window.google.maps.places.AutocompleteService();
     this.placesService = new window.google.maps.places.PlacesService(document.createElement('div'));
   },
 
   methods: {
+    // Proxy focus to inner input
+    focus() {
+      this.$refs.autocomplete && this.$refs.autocomplete.focus();
+    },
+    // Proxy blur to inner input
+    blur() {
+      this.$refs.autocomplete && this.$refs.autocomplete.blur();
+    },
     onInput() {
       const input = this.autocompleteText;
       if (!input) {
@@ -90,7 +97,6 @@ export default {
       });
       this.$emit('inputChange', { newVal: input }, this.id);
     },
-
     highlight(delta) {
       const len = this.predictions.length;
       let idx = this.highlightedIndex + delta;
@@ -98,19 +104,15 @@ export default {
       if (idx >= len) idx = 0;
       this.highlightedIndex = idx;
     },
-
     selectHighlighted() {
       if (this.highlightedIndex >= 0) {
         this.select(this.predictions[this.highlightedIndex]);
       }
     },
-
     select(prediction) {
       this.autocompleteText = prediction.description;
       this.predictions = [];
       this.$emit('change', this.autocompleteText);
-
-      // Получаем детали места
       this.placesService.getDetails({
         placeId: prediction.place_id,
         fields: this.fields,
@@ -123,28 +125,23 @@ export default {
         }
       });
     },
-
     onFocus() {
       this.$emit('focus');
       if (this.enableGeolocation) this.geolocate();
     },
-
     onBlur() {
       setTimeout(() => { this.predictions = []; }, 200);
       this.$emit('blur');
     },
-
     geolocate() {
       if (navigator.geolocation) {
         const options = this.geolocationOptions || {};
         navigator.geolocation.getCurrentPosition(pos => {
           const geoloc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
           const circle = new window.google.maps.Circle({ center: geoloc, radius: pos.coords.accuracy });
-          // Можно использовать для ограничения поиска
         }, err => this.$emit('error', err));
       }
     },
-
     formatResult(place) {
       const rtn = {};
       if (place.address_components) {

@@ -139,7 +139,12 @@ export default {
       this.predictions = [];
 
       const place = pred.toPlace();
-      await place.fetchFields({ fields: this.fields });
+      // конвертация имен полей в camelCase для нового API
+const fieldsToRequest = this.fields.map(field => {
+  if (field === 'geometry') return 'location';
+  return field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+});
+await place.fetchFields({ fields: fieldsToRequest });;
       const data = this.formatResult(place);
       this.$emit('placechanged', data, place, this.id);
     },
@@ -182,15 +187,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-.vue-google-autocomplete input.form-control {
-  /* ваши стили */
-}
-.vue-google-autocomplete .dropdown-menu {
-  /* ваши стили */
-}
-.vue-google-autocomplete .dropdown-item.active {
-  /* ваши стили */
-}
-</style>

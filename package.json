@@ -24,7 +24,8 @@
     "hot": "cross-env NODE_ENV=development webpack-dev-server --inline --hot",
     "production": "cross-env NODE_ENV=production webpack --progress --hide-modules",
     "deploy:example": "gh-pages -d example/dist",
-    "test": "NODE_PATH=test ava --verbose"
+    "test": "NODE_PATH=test ava --verbose",
+    "build": "vue-cli-service build --target lib --name vue-google-autocomplete src/VueGoogleAutocomplete.vue"
   },
   "ava": {
     "require": [

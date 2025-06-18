@@ -1,5 +1,5 @@
 <template>
-  <div class="vue-google-autocomplete" ref="root" style="position: relative;">
+  <div class="vue-google-autocomplete" style="position: relative;">
     <input
       ref="autocomplete"
       type="text"
@@ -7,15 +7,14 @@
       :id="id"
       :placeholder="placeholder"
       :disabled="disabled"
-      v-model="textInput"
+      v-model="textValue"
       @input="onInput"
-      @focus="onFocus"
       @keydown.down.prevent="highlight(1)"
       @keydown.up.prevent="highlight(-1)"
       @keydown.enter.prevent="selectHighlighted"
-      @keydown.esc.prevent="hideSuggestions"
     />
-    <ul v-show="showSuggestionsList" class="dropdown-menu">
+    <!-- dropdown -->
+    <ul v-if="predictions.length" class="dropdown-menu">
       <li
         v-for="(sugg, idx) in predictions"
         :key="sugg.placePrediction.placeId"
@@ -30,148 +29,140 @@
 
 <script>
 export default {
-  name: 'VueGoogleAutocomplete',
+  name: "VueGoogleAutocomplete",
   props: {
-    value: { type: String, default: '' },
+    value: { type: String, default: "" },
     id: { type: String, required: true },
     classname: String,
-    placeholder: { type: String, default: 'Start typing' },
+    placeholder: { type: String, default: "Start typing" },
     disabled: { type: Boolean, default: false },
-    fields: { type: Array, default: () => ['address_components','formatted_address','geometry','url','utc_offset_minutes'] },
-    enableGeolocation: { type: Boolean, default: false },
-    geolocationOptions: { type: Object, default: null }
+    fields: {
+      type: Array,
+      default: () => [
+        "address_components",
+        "formatted_address",
+        "geometry",
+        "url",
+        "utc_offset_minutes",
+      ],
+    },
   },
   data() {
     return {
-      textInput: this.value,
+      textValue: this.value,
       predictions: [],
       highlightedIndex: -1,
-      showSuggestionsList: false,
       AutocompleteSuggestion: null,
       AutocompleteSessionToken: null,
-      Place: null
+      Place: null,
     };
   },
   watch: {
-    value(newVal) {
-      this.textInput = newVal;
-    }
+    value(val) {
+      this.textValue = val;
+    },
   },
   async mounted() {
-    const places = await window.google.maps.importLibrary('places');
-    this.AutocompleteSuggestion   = places.AutocompleteSuggestion;
+    // грузим новый Data-API
+    const places = await window.google.maps.importLibrary("places");
+    this.AutocompleteSuggestion = places.AutocompleteSuggestion;
     this.AutocompleteSessionToken = places.AutocompleteSessionToken;
-    this.Place                    = places.Place;
-    document.addEventListener('click', this.onClickOutside);
-  },
-  beforeDestroy() {
-    document.removeEventListener('click', this.onClickOutside);
+    this.Place = places.Place;
   },
   methods: {
-    onClickOutside(e) {
-      if (!this.$refs.root.contains(e.target)) this.hideSuggestions();
-    },
     onInput() {
-      this.$emit('input', this.textInput);
-      this.fetchSuggestions(this.textInput);
+      // пушим в v-model и запрашиваем подсказки
+      this.$emit("input", this.textValue);
+      this.fetchSuggestions(this.textValue);
     },
-    onFocus() {
-      this.showSuggestionsList = true;
-      this.fetchSuggestions(this.textInput);
-    },
-    hideSuggestions() {
-      this.showSuggestionsList = false;
-      this.highlightedIndex = -1;
-    },
-    async fetchSuggestions(query) {
-      if (!query || !this.AutocompleteSuggestion) {
+    async fetchSuggestions(input) {
+      if (!input || !this.AutocompleteSuggestion) {
         this.predictions = [];
         return;
       }
-      const sessionToken = new this.AutocompleteSessionToken();
-      const req = { input: query, sessionToken };
+      const token = new this.AutocompleteSessionToken();
       try {
         const { suggestions } =
-          await this.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
+          await this.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+            input,
+            sessionToken: token,
+          });
         this.predictions = suggestions;
         this.highlightedIndex = -1;
-        this.showSuggestionsList = !!suggestions.length;
       } catch (e) {
-        console.error('AutocompleteSuggestion error', e);
+        console.error("AutocompleteSuggestion error", e);
         this.predictions = [];
-        this.showSuggestionsList = false;
       }
     },
     highlight(delta) {
-      const len = this.predictions.length;
+      if (!this.predictions.length) return;
       let i = this.highlightedIndex + delta;
-      if (i < 0) i = len - 1;
-      if (i >= len) i = 0;
+      if (i < 0) i = this.predictions.length - 1;
+      if (i >= this.predictions.length) i = 0;
       this.highlightedIndex = i;
     },
-    selectHighlighted() {
-      if (this.highlightedIndex >= 0) this.select(this.predictions[this.highlightedIndex]);
+    async selectHighlighted() {
+      if (this.highlightedIndex >= 0) {
+        await this.select(this.predictions[this.highlightedIndex]);
+      }
     },
     async select(sugg) {
-      const pred = sugg.placePrediction;
-      const fullText = pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
-      this.textInput = fullText;
-      this.$emit('input', fullText);
-      this.hideSuggestions();
-      const place = pred.toPlace();
-      const fieldsToRequest = this.fields.map(f => {
-        if (f === 'geometry') return 'location';
-        if (f === 'url') return 'websiteURI';
-        if (f === 'utc_offset_minutes') return 'utcOffsetMinutes';
+      // Собираем текст
+      const p = sugg.placePrediction;
+      const fullText =
+        p.text.mainText +
+        (p.text.secondaryText ? ", " + p.text.secondaryText : "");
+      // Устанавливаем сразу в v-model
+      this.textValue = fullText;
+      this.$emit("input", fullText);
+      // Скрываем список
+      this.predictions = [];
+      this.highlightedIndex = -1;
+
+      // Получаем детали места
+      const place = p.toPlace();
+      const fieldsToRequest = this.fields.map((f) => {
+        if (f === "geometry") return "location";
+        if (f === "url") return "websiteURI";
+        if (f === "utc_offset_minutes") return "utcOffsetMinutes";
         return f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
       });
       await place.fetchFields({ fields: fieldsToRequest });
+
       const data = this.formatResult(place);
-      this.$emit('placechanged', data, place, this.id);
+      this.$emit("placechanged", data, place, this.id);
     },
     getSuggestionText(sugg) {
-      return sugg.placePrediction.text
-        ? sugg.placePrediction.text.toString()
-        : (sugg.placePrediction.description || '');
-    },
-    geolocate() {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          new window.google.maps.Circle({
-            center: {lat: pos.coords.latitude, lng: pos.coords.longitude},
-            radius: pos.coords.accuracy
-          });
-        },
-        err => this.$emit('error', err),
-        this.geolocationOptions || {}
-      );
+      const p = sugg.placePrediction;
+      return p.text
+        ? p.text.toString()
+        : p.description || "";
     },
     formatResult(place) {
       const out = {};
-      (place.addressComponents || []).forEach(c => {
-        const type = c.types[0];
+      (place.addressComponents || []).forEach((c) => {
+        const t = c.types[0];
         const map = {
-          subpremise: 'short_name',
-          street_number: 'short_name',
-          route: 'long_name',
-          locality: 'long_name',
-          administrative_area_level_1: 'short_name',
-          administrative_area_level_2: 'long_name',
-          country: 'long_name',
-          postal_code: 'short_name'
+          subpremise: "short_name",
+          street_number: "short_name",
+          route: "long_name",
+          locality: "long_name",
+          administrative_area_level_1: "short_name",
+          administrative_area_level_2: "long_name",
+          country: "long_name",
+          postal_code: "short_name",
         };
-        if (map[type]) out[type] = c[map[type]];
+        if (map[t]) out[t] = c[map[t]];
       });
       if (place.location) {
-        out.latitude  = place.location.lat();
+        out.latitude = place.location.lat();
         out.longitude = place.location.lng();
       }
-      out.formatted_address = place.formattedAddress || '';
-      out.url               = place.websiteURI || '';
+      out.formatted_address = place.formattedAddress || "";
+      out.url = place.websiteURI || "";
       return out;
-    }
-  }
+    },
+  },
 };
 </script>
 
@@ -180,7 +171,7 @@ export default {
   background: #fff;
   border: 1px solid #dadce0;
   border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(32,33,36,.28);
+  box-shadow: 0 2px 6px rgba(32, 33, 36, 0.28);
   font-family: Roboto, Arial, sans-serif;
   font-size: 16px;
   margin-top: 4px;
@@ -188,39 +179,19 @@ export default {
   position: absolute;
   width: 100%;
   z-index: 1000;
-  overflow: hidden;
 }
 .vue-google-autocomplete .dropdown-item {
-  display: flex;
-  align-items: center;
-  height: 48px;
   padding: 0 16px;
+  height: 48px;
+  line-height: 48px;
   cursor: pointer;
-  color: #3c4043;
-  line-height: 20px;
   white-space: nowrap;
-  text-overflow: ellipsis;
   overflow: hidden;
+  text-overflow: ellipsis;
+  color: #3c4043;
 }
-.vue-google-autocomplete .dropdown-item::before {
-  content: '';
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin-right: 12px;
-  background-image: url("data:image/svg+xml;charset=UTF-8,<svg fill='%23666' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z'/><circle cx='12' cy='9' fill='%23fff' r='2.5'/></svg>");
-  background-size: 20px 20px;
-}
-.vue-google-autocomplete .dropdown-item:hover,
-.vue-google-autocomplete .dropdown-item.active {
+.vue-google-autocomplete .dropdown-item.active,
+.vue-google-autocomplete .dropdown-item:hover {
   background-color: #f1f3f4;
-}
-.vue-google-autocomplete .dropdown-menu::after {
-  content: 'powered by Google';
-  display: block;
-  padding: 8px 16px;
-  font-size: 12px;
-  color: #70757a;
-  text-align: right;
 }
 </style>

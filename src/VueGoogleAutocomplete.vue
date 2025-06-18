@@ -144,8 +144,7 @@ export default {
 
     async select(sugg) {
       const pred = sugg.placePrediction;
-      const fullText =
-        pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
+      const fullText = sugg.placePrediction.text.text;
       this.$emit('input', fullText);
       this.predictions = [];
 

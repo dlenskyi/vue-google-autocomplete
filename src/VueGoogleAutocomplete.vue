@@ -13,14 +13,9 @@
       @keydown.up.prevent="highlight(-1)"
       @keydown.enter.prevent="selectHighlighted"
       @keydown.esc.prevent="closeSuggestions"
-      @keypress="onKeyPress"
-      @keyup="onKeyUp"
       style="width:100%; box-sizing:border-box;"
     />
-    <ul
-      v-if="predictions.length"
-      class="dropdown-menu"
-    >
+    <ul v-if="predictions.length" class="dropdown-menu">
       <li
         v-for="(sugg, idx) in predictions"
         :key="sugg.placePrediction.placeId"
@@ -49,6 +44,7 @@ export default {
   name: 'VueGoogleAutocomplete',
 
   props: {
+    value: { type: String, default: '' },
     id: { type: String, required: true },
     classname: String,
     placeholder: { type: String, default: 'Start typing' },
@@ -62,7 +58,7 @@ export default {
 
   data() {
     return {
-      textValue: this.value || '',
+      textValue: this.value,
       predictions: [],
       highlightedIndex: -1,
       AutocompleteSuggestion: null,
@@ -71,22 +67,13 @@ export default {
     };
   },
 
-  computed: {
-    // support v-model
-    value: {
-      get() { return this.textValue; },
-      set(v) { this.textValue = v; }
-    }
-  },
-
   watch: {
-    textValue(newVal, oldVal) {
-      this.$emit('inputChange', { newVal, oldVal }, this.id);
+    value(newVal) {
+      this.textValue = newVal;
     }
   },
 
   async mounted() {
-    // load new places module
     const lib = await window.google.maps.importLibrary('places');
     this.AutocompleteSuggestion    = lib.AutocompleteSuggestion;
     this.AutocompleteSessionToken  = lib.AutocompleteSessionToken;
@@ -97,6 +84,18 @@ export default {
     document.removeEventListener('click', this.onClickOutside);
   },
 
+  computed: {
+    // two-way binding for v-model
+    textValue: {
+      get() {
+        return this.value;
+      },
+      set(v) {
+        this.$emit('input', v);
+      }
+    }
+  },
+
   methods: {
     onClickOutside(e) {
       if (!this.$refs.root.contains(e.target)) {
@@ -105,8 +104,6 @@ export default {
     },
 
     onInput() {
-      // v-model updated already
-      this.$emit('change', this.textValue);
       this.fetchSuggestions(this.textValue);
     },
 
@@ -117,12 +114,9 @@ export default {
       }
       const opts = { input: query, sessionToken: new this.AutocompleteSessionToken() };
       if (this.types) opts.types = [this.types];
-      if (this.country) {
-        opts.componentRestrictions = { country: this.country };
-      }
+      // remove componentRestrictions: not supported by AutocompleteSuggestion
       try {
-        const { suggestions } =
-          await this.AutocompleteSuggestion.fetchAutocompleteSuggestions(opts);
+        const { suggestions } = await this.AutocompleteSuggestion.fetchAutocompleteSuggestions(opts);
         this.predictions = suggestions;
         this.highlightedIndex = -1;
       } catch (err) {
@@ -135,7 +129,9 @@ export default {
     highlight(delta) {
       const n = this.predictions.length;
       if (!n) return;
-      let i = (this.highlightedIndex + delta + n) % n;
+      let i = this.highlightedIndex + delta;
+      if (i < 0) i = n - 1;
+      if (i >= n) i = 0;
       this.highlightedIndex = i;
     },
 
@@ -147,15 +143,13 @@ export default {
 
     async select(sugg) {
       const p = sugg.placePrediction;
-      const txt = p.text.mainText + (p.text.secondaryText ? ', ' + p.text.secondaryText : '');
-      // set text immediately
-      this.$refs.autocomplete.value = txt;
-      this.textValue = txt;
-      this.$emit('input', txt);
-      this.$emit('placechanged', null, null, this.id); // optional emitter for start
-      this.closeSuggestions();
+      const fullText = p.text.mainText + (p.text.secondaryText ? ', ' + p.text.secondaryText : '');
+      // set immediately
+      this.$refs.autocomplete.value = fullText;
+      this.$emit('input', fullText);
+      this.predictions = [];
+      this.highlightedIndex = -1;
 
-      // fetch details
       const place = p.toPlace();
       const fieldsReq = this.fields.map(f => {
         if (f === 'geometry') return 'location';
@@ -164,13 +158,8 @@ export default {
         return f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
       });
       await place.fetchFields({ fields: fieldsReq });
-      const result = this.formatResult(place);
-      this.$emit('placechanged', result, place, this.id);
-    },
-
-    suggestionText(sugg) {
-      const p = sugg.placePrediction;
-      return p.text ? p.text.toString() : (p.description || '');
+      const data = this.formatResult(place);
+      this.$emit('placechanged', data, place, this.id);
     },
 
     closeSuggestions() {
@@ -178,11 +167,9 @@ export default {
       this.highlightedIndex = -1;
     },
 
-    onKeyPress(e) {
-      this.$emit('keypress', e);
-    },
-    onKeyUp(e) {
-      this.$emit('keyup', e);
+    getSuggestionText(sugg) {
+      const p = sugg.placePrediction;
+      return p.text ? p.text.toString() : (p.description || '');
     },
 
     formatResult(place) {
@@ -191,21 +178,18 @@ export default {
         const type = c.types[0];
         if (ADDRESS_COMPONENTS[type]) out[type] = c[ADDRESS_COMPONENTS[type]];
       });
-      if (place.geometry?.location) {
-        out.latitude = place.geometry.location.lat();
-        out.longitude = place.geometry.location.lng();
+      if (place.location) {
+        out.latitude = place.location.lat();
+        out.longitude = place.location.lng();
       }
       out.formatted_address = place.formattedAddress || '';
       out.url = place.websiteURI || '';
       return out;
     },
 
-    geolocate() {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(pos => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        new window.google.maps.Circle({ center: loc, radius: pos.coords.accuracy });
-      }, err => this.$emit('error', err), this.geolocationOptions || {});
+    closeSuggestions() {
+      this.predictions = [];
+      this.highlightedIndex = -1;
     }
   }
 };
@@ -226,7 +210,7 @@ export default {
   z-index: 1000;
   list-style: none;
 }
-.vue-google-autocomplete .dropdown-menu .dropdown-item {
+.vue-google-autocomplete .dropdown-item {
   padding: 0 16px;
   height: 48px;
   line-height: 48px;
@@ -234,10 +218,9 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  color: #3c4043;
 }
-.vue-google-autocomplete .dropdown-menu .dropdown-item.active,
-.vue-google-autocomplete .dropdown-menu .dropdown-item:hover {
+.vue-google-autocomplete .dropdown-item.active,
+.vue-google-autocomplete .dropdown-item:hover {
   background-color: #f1f3f4;
 }
 </style>

@@ -81,36 +81,47 @@ export default {
   },
 
   mounted() {
-    // Инициализация сервисов после загрузки Google Maps JS
-    this.autocompleteService = new window.google.maps.places.AutocompleteService();
-    this.placesService = new window.google.maps.places.PlacesService(
-      document.createElement('div')
-    );
+    // Ждём, пока google.maps.places будет доступен
+    const initServices = () => {
+      if (
+        window.google &&
+        window.google.maps &&
+        window.google.maps.places &&
+        !this.autocompleteService
+      ) {
+        this.autocompleteService =
+          new window.google.maps.places.AutocompleteService();
+        this.placesService =
+          new window.google.maps.places.PlacesService(
+            document.createElement('div')
+          );
+      } else if (!window.google || !window.google.maps || !window.google.maps.places) {
+        // Если ещё не загружено, проверяем снова через 200ms
+        setTimeout(initServices, 200);
+      }
+    };
+    initServices();
   },
 
   methods: {
-    // Проксируем focus на внутренний input
     focus() {
       this.$refs.autocomplete && this.$refs.autocomplete.focus();
     },
-    // Проксируем blur
     blur() {
       this.$refs.autocomplete && this.$refs.autocomplete.blur();
     },
 
-    // Обработчик ввода
     onInput() {
+      if (!this.autocompleteService) return;
       const input = this.autocompleteText;
       if (!input) {
         this.predictions = [];
         return;
       }
-
       const opts = { input, types: [this.types] };
       if (this.country) {
         opts.componentRestrictions = { country: this.country };
       }
-
       this.autocompleteService.getPlacePredictions(
         opts,
         (preds, status) => {
@@ -125,11 +136,9 @@ export default {
           }
         }
       );
-
       this.$emit('inputChange', { newVal: input }, this.id);
     },
 
-    // Навигация стрелками
     highlight(delta) {
       const len = this.predictions.length;
       let idx = this.highlightedIndex + delta;
@@ -138,19 +147,17 @@ export default {
       this.highlightedIndex = idx;
     },
 
-    // Выбор по Enter
     selectHighlighted() {
       if (this.highlightedIndex >= 0) {
         this.select(this.predictions[this.highlightedIndex]);
       }
     },
 
-    // Обработка клика/выбора
     select(prediction) {
       this.autocompleteText = prediction.description;
       this.predictions = [];
       this.$emit('change', this.autocompleteText);
-
+      if (!this.placesService) return;
       this.placesService.getDetails(
         {
           placeId: prediction.place_id,
@@ -170,13 +177,11 @@ export default {
       );
     },
 
-    // При фокусе — геолокация (если нужно)
     onFocus() {
       this.$emit('focus');
       if (this.enableGeolocation) this.geolocate();
     },
 
-    // При блюре скрываем подсказки
     onBlur() {
       setTimeout(() => {
         this.predictions = [];
@@ -184,16 +189,12 @@ export default {
       this.$emit('blur');
     },
 
-    // Геолокация браузера
     geolocate() {
       if (navigator.geolocation) {
         const options = this.geolocationOptions || {};
         navigator.geolocation.getCurrentPosition(
           pos => {
-            const geoloc = {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude
-            };
+            const geoloc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             new window.google.maps.Circle({
               center: geoloc,
               radius: pos.coords.accuracy
@@ -205,7 +206,6 @@ export default {
       }
     },
 
-    // Форматируем результат для emit
     formatResult(place) {
       const rtn = {};
       if (place.address_components) {
@@ -226,3 +226,15 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.vue-google-autocomplete input.form-control {
+  /* ваши стили для input */
+}
+.vue-google-autocomplete .dropdown-menu {
+  /* ваши стили для выпадающего списка */
+}
+.vue-google-autocomplete .dropdown-item.active {
+  /* стили для выделенного элемента */
+}
+</style>

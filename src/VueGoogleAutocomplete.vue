@@ -49,10 +49,30 @@ export default {
     };
   },
 
-  mounted() {
-    this._loadBetaMapsAPI()
-      .then(() => this._initElement())
-      .catch(err => this.$emit('error', err));
+  async mounted() {
+    await new Promise(resolve => {
+      if (window.google && google.maps.places) resolve();
+      window.initGoogleMaps = resolve;
+    });
+  
+    this.placeAutocomplete = new google.maps.places.PlaceAutocompleteElement({
+      componentRestrictions: this.country ? { country: this.country } : undefined,
+      types: this.types ? [this.types] : undefined,
+      // locationRestriction: map.getBounds(),
+    });
+  
+    this.placeAutocomplete.id = this.id;
+  
+    this.$refs.container.appendChild(this.placeAutocomplete);
+  
+    this.placeAutocomplete.addEventListener('gmp-select', async (event) => {
+      const place = event.placePrediction.toPlace();
+      await place.fetchFields({ fields: this.fields });
+      const result = this.formatResult(place);
+      this.$emit('placechanged', result, place, this.id);
+      this.autocompleteText = place.displayName || place.formattedAddress;
+      this.$emit('change', this.autocompleteText);
+    });
   },
 
   methods: {

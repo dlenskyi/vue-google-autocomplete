@@ -7,22 +7,20 @@
       :id="id"
       :placeholder="placeholder"
       :disabled="disabled"
-      v-model="textValue"
+      v-model="textInput"
+      @input="onInput"
       @focus="onFocus"
       @keydown.down.prevent="highlight(1)"
       @keydown.up.prevent="highlight(-1)"
       @keydown.enter.prevent="selectHighlighted"
-      @keydown.esc.prevent="closeSuggestions"
+      @keydown.esc.prevent="hideSuggestions"
     />
-    <ul
-      v-if="predictions.length"
-      class="dropdown-menu"
-    >
+    <ul v-show="showSuggestionsList" class="dropdown-menu">
       <li
         v-for="(sugg, idx) in predictions"
         :key="sugg.placePrediction.placeId"
         :class="['dropdown-item', { active: idx === highlightedIndex }]"
-        @click.prevent="select(sugg)"
+        @mousedown.prevent="select(sugg)"
       >
         {{ getSuggestionText(sugg) }}
       </li>
@@ -33,74 +31,58 @@
 <script>
 export default {
   name: 'VueGoogleAutocomplete',
-
   props: {
     value: { type: String, default: '' },
     id: { type: String, required: true },
     classname: String,
     placeholder: { type: String, default: 'Start typing' },
     disabled: { type: Boolean, default: false },
-    country: { type: [String, Array], default: () => [] },
-    fields: {
-      type: Array,
-      default: () => ['address_components','formatted_address','geometry','url','utc_offset_minutes']
-    },
+    fields: { type: Array, default: () => ['address_components','formatted_address','geometry','url','utc_offset_minutes'] },
     enableGeolocation: { type: Boolean, default: false },
     geolocationOptions: { type: Object, default: null }
   },
-
   data() {
     return {
+      textInput: this.value,
       predictions: [],
       highlightedIndex: -1,
+      showSuggestionsList: false,
       AutocompleteSuggestion: null,
       AutocompleteSessionToken: null,
       Place: null
     };
   },
-
-  computed: {
-    textValue: {
-      get() {
-        return this.value;
-      },
-      set(val) {
-        this.$emit('input', val);
-        this.fetchSuggestions(val);
-      }
+  watch: {
+    value(newVal) {
+      this.textInput = newVal;
     }
   },
-
   async mounted() {
-    // load new places library
     const places = await window.google.maps.importLibrary('places');
-    this.AutocompleteSuggestion    = places.AutocompleteSuggestion;
-    this.AutocompleteSessionToken  = places.AutocompleteSessionToken;
-    this.Place                     = places.Place;
-
-    // click outside handler
+    this.AutocompleteSuggestion   = places.AutocompleteSuggestion;
+    this.AutocompleteSessionToken = places.AutocompleteSessionToken;
+    this.Place                    = places.Place;
     document.addEventListener('click', this.onClickOutside);
   },
   beforeDestroy() {
     document.removeEventListener('click', this.onClickOutside);
   },
-
   methods: {
-    onClickOutside(event) {
-      if (!this.$refs.root.contains(event.target)) {
-        this.closeSuggestions();
-      }
+    onClickOutside(e) {
+      if (!this.$refs.root.contains(e.target)) this.hideSuggestions();
     },
-
-    closeSuggestions() {
-      this.predictions = [];
+    onInput() {
+      this.$emit('input', this.textInput);
+      this.fetchSuggestions(this.textInput);
+    },
+    onFocus() {
+      this.showSuggestionsList = true;
+      this.fetchSuggestions(this.textInput);
+    },
+    hideSuggestions() {
+      this.showSuggestionsList = false;
       this.highlightedIndex = -1;
     },
-
-    focus() {
-      this.$refs.autocomplete?.focus();
-    },
-
     async fetchSuggestions(query) {
       if (!query || !this.AutocompleteSuggestion) {
         this.predictions = [];
@@ -113,12 +95,13 @@ export default {
           await this.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
         this.predictions = suggestions;
         this.highlightedIndex = -1;
+        this.showSuggestionsList = !!suggestions.length;
       } catch (e) {
         console.error('AutocompleteSuggestion error', e);
         this.predictions = [];
+        this.showSuggestionsList = false;
       }
     },
-
     highlight(delta) {
       const len = this.predictions.length;
       let i = this.highlightedIndex + delta;
@@ -126,22 +109,15 @@ export default {
       if (i >= len) i = 0;
       this.highlightedIndex = i;
     },
-
-    async selectHighlighted() {
-      if (this.highlightedIndex >= 0) {
-        await this.select(this.predictions[this.highlightedIndex]);
-      }
+    selectHighlighted() {
+      if (this.highlightedIndex >= 0) this.select(this.predictions[this.highlightedIndex]);
     },
-
     async select(sugg) {
       const pred = sugg.placePrediction;
-      const text = pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
-      // set input value immediately
-      this.$refs.autocomplete.value = text;
-      this.$emit('input', text);
-      this.closeSuggestions();
-
-      // fetch place details
+      const fullText = pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
+      this.textInput = fullText;
+      this.$emit('input', fullText);
+      this.hideSuggestions();
       const place = pred.toPlace();
       const fieldsToRequest = this.fields.map(f => {
         if (f === 'geometry') return 'location';
@@ -153,30 +129,24 @@ export default {
       const data = this.formatResult(place);
       this.$emit('placechanged', data, place, this.id);
     },
-
     getSuggestionText(sugg) {
       return sugg.placePrediction.text
         ? sugg.placePrediction.text.toString()
         : (sugg.placePrediction.description || '');
     },
-
-    onFocus() {
-      this.$emit('focus');
-      if (this.enableGeolocation) this.geolocate();
-    },
-
     geolocate() {
       if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
         pos => {
-          const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          new window.google.maps.Circle({ center: loc, radius: pos.coords.accuracy });
+          new window.google.maps.Circle({
+            center: {lat: pos.coords.latitude, lng: pos.coords.longitude},
+            radius: pos.coords.accuracy
+          });
         },
         err => this.$emit('error', err),
         this.geolocationOptions || {}
       );
     },
-
     formatResult(place) {
       const out = {};
       (place.addressComponents || []).forEach(c => {

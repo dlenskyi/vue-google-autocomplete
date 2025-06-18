@@ -1,5 +1,5 @@
 <template>
-  <div class="vue-google-autocomplete" style="position: relative;">
+  <div class="vue-google-autocomplete" ref="root" style="position: relative;">
     <input
       ref="autocomplete"
       type="text"
@@ -9,15 +9,14 @@
       :disabled="disabled"
       v-model="textValue"
       @focus="onFocus"
-      @blur="onBlur"
       @keydown.down.prevent="highlight(1)"
       @keydown.up.prevent="highlight(-1)"
       @keydown.enter.prevent="selectHighlighted"
+      @keydown.esc.prevent="closeSuggestions"
     />
     <ul
       v-if="predictions.length"
-      class="dropdown-menu show"
-      style="position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; z-index: 1000;"
+      class="dropdown-menu"
     >
       <li
         v-for="(sugg, idx) in predictions"
@@ -25,26 +24,13 @@
         :class="['dropdown-item', { active: idx === highlightedIndex }]"
         @click.prevent="select(sugg)"
       >
-        {{ sugg.placePrediction.text
-            ? sugg.placePrediction.text.toString()
-            : (sugg.placePrediction.description || '') }}
+        {{ getSuggestionText(sugg) }}
       </li>
     </ul>
   </div>
 </template>
 
 <script>
-const ADDRESS_COMPONENTS = {
-  subpremise: 'short_name',
-  street_number: 'short_name',
-  route: 'long_name',
-  locality: 'long_name',
-  administrative_area_level_1: 'short_name',
-  administrative_area_level_2: 'long_name',
-  country: 'long_name',
-  postal_code: 'short_name'
-};
-
 export default {
   name: 'VueGoogleAutocomplete',
 
@@ -54,8 +40,11 @@ export default {
     classname: String,
     placeholder: { type: String, default: 'Start typing' },
     disabled: { type: Boolean, default: false },
-    country: { type: [String, Array], default: null },
-    fields: { type: Array, default: () => ['address_components', 'formatted_address', 'geometry', 'url', 'utc_offset_minutes'] },
+    country: { type: [String, Array], default: () => [] },
+    fields: {
+      type: Array,
+      default: () => ['address_components','formatted_address','geometry','url','utc_offset_minutes']
+    },
     enableGeolocation: { type: Boolean, default: false },
     geolocationOptions: { type: Object, default: null }
   },
@@ -83,18 +72,33 @@ export default {
   },
 
   async mounted() {
+    // load new places library
     const places = await window.google.maps.importLibrary('places');
-    this.AutocompleteSuggestion   = places.AutocompleteSuggestion;
-    this.AutocompleteSessionToken = places.AutocompleteSessionToken;
-    this.Place                    = places.Place;
+    this.AutocompleteSuggestion    = places.AutocompleteSuggestion;
+    this.AutocompleteSessionToken  = places.AutocompleteSessionToken;
+    this.Place                     = places.Place;
+
+    // click outside handler
+    document.addEventListener('click', this.onClickOutside);
+  },
+  beforeDestroy() {
+    document.removeEventListener('click', this.onClickOutside);
   },
 
   methods: {
-    focus() {
-      this.$refs.autocomplete && this.$refs.autocomplete.focus();
+    onClickOutside(event) {
+      if (!this.$refs.root.contains(event.target)) {
+        this.closeSuggestions();
+      }
     },
-    blur() {
-      this.$refs.autocomplete && this.$refs.autocomplete.blur();
+
+    closeSuggestions() {
+      this.predictions = [];
+      this.highlightedIndex = -1;
+    },
+
+    focus() {
+      this.$refs.autocomplete?.focus();
     },
 
     async fetchSuggestions(query) {
@@ -102,38 +106,25 @@ export default {
         this.predictions = [];
         return;
       }
-    
       const sessionToken = new this.AutocompleteSessionToken();
       const req = { input: query, sessionToken };
-    
-      if (this.country) {
-        // Нормализуем массив кодов в верхний регистр
-        const codes = (Array.isArray(this.country)
-          ? this.country
-          : [this.country]
-        ).map(c => c.toUpperCase());
-    
-        // Жёстко ограничиваем выдачу этими странами
-        req.includedRegionCodes = codes;
-      }
-    
       try {
         const { suggestions } =
           await this.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
-        this.predictions     = suggestions;
+        this.predictions = suggestions;
         this.highlightedIndex = -1;
       } catch (e) {
-        console.error("AutocompleteSuggestion error", e);
+        console.error('AutocompleteSuggestion error', e);
         this.predictions = [];
       }
     },
 
     highlight(delta) {
       const len = this.predictions.length;
-      let idx = this.highlightedIndex + delta;
-      if (idx < 0) idx = len - 1;
-      if (idx >= len) idx = 0;
-      this.highlightedIndex = idx;
+      let i = this.highlightedIndex + delta;
+      if (i < 0) i = len - 1;
+      if (i >= len) i = 0;
+      this.highlightedIndex = i;
     },
 
     async selectHighlighted() {
@@ -144,37 +135,34 @@ export default {
 
     async select(sugg) {
       const pred = sugg.placePrediction;
-      const fullText =
-        pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
-      this.$emit('input', fullText);
-      this.predictions = [];
+      const text = pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
+      // set input value immediately
+      this.$refs.autocomplete.value = text;
+      this.$emit('input', text);
+      this.closeSuggestions();
 
+      // fetch place details
       const place = pred.toPlace();
-      // convert snake_case fields to camelCase for fetch
-      const fieldsToRequest = this.fields.map(field => {
-        switch (field) {
-          case 'geometry':
-            return 'location';
-          case 'url':
-            return 'websiteURI';
-          default:
-            return field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-        }
+      const fieldsToRequest = this.fields.map(f => {
+        if (f === 'geometry') return 'location';
+        if (f === 'url') return 'websiteURI';
+        if (f === 'utc_offset_minutes') return 'utcOffsetMinutes';
+        return f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
       });
       await place.fetchFields({ fields: fieldsToRequest });
-
       const data = this.formatResult(place);
       this.$emit('placechanged', data, place, this.id);
+    },
+
+    getSuggestionText(sugg) {
+      return sugg.placePrediction.text
+        ? sugg.placePrediction.text.toString()
+        : (sugg.placePrediction.description || '');
     },
 
     onFocus() {
       this.$emit('focus');
       if (this.enableGeolocation) this.geolocate();
-    },
-
-    onBlur() {
-      setTimeout(() => (this.predictions = []), 200);
-      this.$emit('blur');
     },
 
     geolocate() {
@@ -191,9 +179,9 @@ export default {
 
     formatResult(place) {
       const out = {};
-      (place.addressComponents || []).forEach(comp => {
-        const type = comp.types[0];
-        const keyMap = {
+      (place.addressComponents || []).forEach(c => {
+        const type = c.types[0];
+        const map = {
           subpremise: 'short_name',
           street_number: 'short_name',
           route: 'long_name',
@@ -203,14 +191,14 @@ export default {
           country: 'long_name',
           postal_code: 'short_name'
         };
-        if (keyMap[type]) out[type] = comp[keyMap[type]];
+        if (map[type]) out[type] = c[map[type]];
       });
       if (place.location) {
-        out.latitude = place.location.lat();
+        out.latitude  = place.location.lat();
         out.longitude = place.location.lng();
       }
       out.formatted_address = place.formattedAddress || '';
-      out.url = place.websiteURI || '';
+      out.url               = place.websiteURI || '';
       return out;
     }
   }
@@ -222,7 +210,7 @@ export default {
   background: #fff;
   border: 1px solid #dadce0;
   border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(32, 33, 36, .28);
+  box-shadow: 0 2px 6px rgba(32,33,36,.28);
   font-family: Roboto, Arial, sans-serif;
   font-size: 16px;
   margin-top: 4px;
@@ -232,7 +220,6 @@ export default {
   z-index: 1000;
   overflow: hidden;
 }
-
 .vue-google-autocomplete .dropdown-item {
   display: flex;
   align-items: center;
@@ -245,8 +232,6 @@ export default {
   text-overflow: ellipsis;
   overflow: hidden;
 }
-
-/* маркер-иконка слева */
 .vue-google-autocomplete .dropdown-item::before {
   content: '';
   flex: none;
@@ -256,14 +241,10 @@ export default {
   background-image: url("data:image/svg+xml;charset=UTF-8,<svg fill='%23666' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z'/><circle cx='12' cy='9' fill='%23fff' r='2.5'/></svg>");
   background-size: 20px 20px;
 }
-
-/* hover и текущий пункт */
 .vue-google-autocomplete .dropdown-item:hover,
 .vue-google-autocomplete .dropdown-item.active {
   background-color: #f1f3f4;
 }
-
-/* «powered by Google» внизу */
 .vue-google-autocomplete .dropdown-menu::after {
   content: 'powered by Google';
   display: block;

@@ -15,7 +15,19 @@
       @keydown.up.prevent="highlight(-1)"
       @keydown.enter.prevent="selectHighlighted"
     />
-    <ul v-if="predictions.length" class="dropdown-menu show" style="position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; z-index: 1000;">
+    <ul
+      v-if="predictions.length"
+      class="dropdown-menu show"
+      style="
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+      "
+    >
       <li
         v-for="(p, idx) in predictions"
         :key="p.place_id"
@@ -49,7 +61,10 @@ export default {
     placeholder: { type: String, default: 'Start typing' },
     disabled: { type: Boolean, default: false },
     types: { type: String, default: 'address' },
-    fields: { type: Array, default: () => ['address_components','formatted_address','geometry'] },
+    fields: {
+      type: Array,
+      default: () => ['address_components', 'formatted_address', 'geometry']
+    },
     country: { type: [String, Array], default: null },
     enableGeolocation: { type: Boolean, default: false },
     geolocationOptions: { type: Object, default: null }
@@ -66,37 +81,55 @@ export default {
   },
 
   mounted() {
+    // Инициализация сервисов после загрузки Google Maps JS
     this.autocompleteService = new window.google.maps.places.AutocompleteService();
-    this.placesService = new window.google.maps.places.PlacesService(document.createElement('div'));
+    this.placesService = new window.google.maps.places.PlacesService(
+      document.createElement('div')
+    );
   },
 
   methods: {
-    // Proxy focus to inner input
+    // Проксируем focus на внутренний input
     focus() {
       this.$refs.autocomplete && this.$refs.autocomplete.focus();
     },
-    // Proxy blur to inner input
+    // Проксируем blur
     blur() {
       this.$refs.autocomplete && this.$refs.autocomplete.blur();
     },
+
+    // Обработчик ввода
     onInput() {
       const input = this.autocompleteText;
       if (!input) {
         this.predictions = [];
         return;
       }
+
       const opts = { input, types: [this.types] };
-      if (this.country) opts.componentRestrictions = { country: this.country };
-      this.autocompleteService.getPlacePredictions(opts, (preds, status) => {
-        if (status === window.google.maps.places.PlacesServiceStatus.OK) {
-          this.predictions = preds;
-          this.highlightedIndex = -1;
-        } else {
-          this.predictions = [];
+      if (this.country) {
+        opts.componentRestrictions = { country: this.country };
+      }
+
+      this.autocompleteService.getPlacePredictions(
+        opts,
+        (preds, status) => {
+          if (
+            status ===
+            window.google.maps.places.PlacesServiceStatus.OK
+          ) {
+            this.predictions = preds;
+            this.highlightedIndex = -1;
+          } else {
+            this.predictions = [];
+          }
         }
-      });
+      );
+
       this.$emit('inputChange', { newVal: input }, this.id);
     },
+
+    // Навигация стрелками
     highlight(delta) {
       const len = this.predictions.length;
       let idx = this.highlightedIndex + delta;
@@ -104,50 +137,83 @@ export default {
       if (idx >= len) idx = 0;
       this.highlightedIndex = idx;
     },
+
+    // Выбор по Enter
     selectHighlighted() {
       if (this.highlightedIndex >= 0) {
         this.select(this.predictions[this.highlightedIndex]);
       }
     },
+
+    // Обработка клика/выбора
     select(prediction) {
       this.autocompleteText = prediction.description;
       this.predictions = [];
       this.$emit('change', this.autocompleteText);
-      this.placesService.getDetails({
-        placeId: prediction.place_id,
-        fields: this.fields,
-      }, (place, status) => {
-        if (status === window.google.maps.places.PlacesServiceStatus.OK) {
-          const data = this.formatResult(place);
-          this.$emit('placechanged', data, place, this.id);
-        } else {
-          this.$emit('error', status);
+
+      this.placesService.getDetails(
+        {
+          placeId: prediction.place_id,
+          fields: this.fields
+        },
+        (place, status) => {
+          if (
+            status ===
+            window.google.maps.places.PlacesServiceStatus.OK
+          ) {
+            const data = this.formatResult(place);
+            this.$emit('placechanged', data, place, this.id);
+          } else {
+            this.$emit('error', status);
+          }
         }
-      });
+      );
     },
+
+    // При фокусе — геолокация (если нужно)
     onFocus() {
       this.$emit('focus');
       if (this.enableGeolocation) this.geolocate();
     },
+
+    // При блюре скрываем подсказки
     onBlur() {
-      setTimeout(() => { this.predictions = []; }, 200);
+      setTimeout(() => {
+        this.predictions = [];
+      }, 200);
       this.$emit('blur');
     },
+
+    // Геолокация браузера
     geolocate() {
       if (navigator.geolocation) {
         const options = this.geolocationOptions || {};
-        navigator.geolocation.getCurrentPosition(pos => {
-          const geoloc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          const circle = new window.google.maps.Circle({ center: geoloc, radius: pos.coords.accuracy });
-        }, err => this.$emit('error', err));
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            const geoloc = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude
+            };
+            new window.google.maps.Circle({
+              center: geoloc,
+              radius: pos.coords.accuracy
+            });
+          },
+          err => this.$emit('error', err),
+          options
+        );
       }
     },
+
+    // Форматируем результат для emit
     formatResult(place) {
       const rtn = {};
       if (place.address_components) {
         place.address_components.forEach(comp => {
           const type = comp.types[0];
-          if (ADDRESS_COMPONENTS[type]) rtn[type] = comp[ADDRESS_COMPONENTS[type]];
+          if (ADDRESS_COMPONENTS[type]) {
+            rtn[type] = comp[ADDRESS_COMPONENTS[type]];
+          }
         });
       }
       if (place.geometry && place.geometry.location) {

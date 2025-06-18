@@ -102,22 +102,28 @@ export default {
         this.predictions = [];
         return;
       }
-
+    
       const sessionToken = new this.AutocompleteSessionToken();
       const req = { input: query, sessionToken };
-
+    
       if (this.country) {
-        if (Array.isArray(this.country)) req.includedRegionCodes = this.country;
-        else req.region = this.country;
+        // Нормализуем массив кодов в верхний регистр
+        const codes = (Array.isArray(this.country)
+          ? this.country
+          : [this.country]
+        ).map(c => c.toUpperCase());
+    
+        // Жёстко ограничиваем выдачу этими странами
+        req.includedRegionCodes = codes;
       }
-
+    
       try {
         const { suggestions } =
           await this.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
-        this.predictions = suggestions;
+        this.predictions     = suggestions;
         this.highlightedIndex = -1;
       } catch (e) {
-        console.error('AutocompleteSuggestion error', e);
+        console.error("AutocompleteSuggestion error", e);
         this.predictions = [];
       }
     },
@@ -211,6 +217,7 @@ export default {
 };
 </script>
 
+<style scoped>
 .vue-google-autocomplete .dropdown-menu {
   background: #fff;
   border: 1px solid #dadce0;
@@ -249,6 +256,7 @@ export default {
 .vue-google-autocomplete .dropdown-item.active {
   background-color: #f1f3f4;
 }
+
 .vue-google-autocomplete .dropdown-menu::after {
   content: 'powered by Google';
   display: block;
@@ -257,3 +265,4 @@ export default {
   color: #70757a;
   text-align: right;
 }
+</style>

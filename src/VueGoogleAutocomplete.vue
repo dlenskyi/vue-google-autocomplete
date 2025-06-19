@@ -153,13 +153,19 @@ export default {
     },
 
     async select(sugg) {
-      const pred = sugg.placePrediction;
-      const fullText = sugg.placePrediction.text.text;
-      this.$emit('input', fullText);
-      this.predictions = [];
+      if (!sugg || !sugg.placePrediction) {
+        console.warn('Нечего выбирать:', sugg);
+        return;
+      }
 
+      const pred = sugg.placePrediction;
+      const fullText = pred.text.text;
+      this.$emit('input', fullText);
+  
+      this.predictions = [];
+      this.highlightedIndex = -1;
+  
       const place = pred.toPlace();
-      // convert snake_case fields to camelCase for fetch
       const fieldsToRequest = this.fields.map(field => {
         switch (field) {
           case 'geometry':
@@ -171,8 +177,11 @@ export default {
         }
       });
       await place.fetchFields({ fields: fieldsToRequest });
-
+  
       const data = this.formatResult(place);
+  
+      data.googleMapsUrl = place.googleMapsLinks?.placeUri || '';
+  
       this.$emit('placechanged', data, place, this.id);
     },
 

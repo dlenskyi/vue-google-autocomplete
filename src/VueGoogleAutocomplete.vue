@@ -154,14 +154,14 @@ export default {
 
     async select(sugg) {
       if (!sugg?.placePrediction) {
-        console.warn('nothing to select:', sugg);
+        console.warn('Nothing to select:', sugg);
         return;
       }
   
       const pred = sugg.placePrediction;
-      const placeId = pred.placeId;
-  
-      const fullText = pred.text.text;
+      const fullText =
+        pred.text.mainText +
+        (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
       this.$emit('input', fullText);
   
       this.predictions = [];
@@ -169,16 +169,16 @@ export default {
   
       const place = pred.toPlace();
       const fieldsToRequest = this.fields.map(f => {
-        if (f === 'geometry')   return 'location';
-        if (f === 'url')        return 'websiteURI';
+        if (f === 'geometry') return 'location';
+        if (f === 'url')      return 'websiteURI';
         return f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
       });
       await place.fetchFields({ fields: fieldsToRequest });
   
       const data = this.formatResult(place);
   
-      data.googleMapsUrl =
-        `https://www.google.com/maps/search/?api=1&query_place_id=${placeId}`;
+      const encoded = encodeURIComponent(fullText);
+      data.url = `https://maps.google.com/?q=${encoded}`;
   
       this.$emit('placechanged', data, place, this.id);
     },

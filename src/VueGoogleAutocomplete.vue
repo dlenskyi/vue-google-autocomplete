@@ -153,34 +153,22 @@ export default {
     },
 
     async select(sugg) {
-      if (!sugg?.placePrediction) {
-        console.warn('Nothing to select:', sugg);
-        return;
-      }
-  
+      if (!sugg || !sugg.placePrediction) return;
       const pred = sugg.placePrediction;
-      const fullText =
-        pred.text.mainText +
-        (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
-      this.$emit('input', fullText);
-  
+      const text = pred.text.text || (pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : ''));
+      this.$emit('input', text);
       this.predictions = [];
       this.highlightedIndex = -1;
-  
       const place = pred.toPlace();
-      const fieldsToRequest = this.fields.map(f => {
+      const fields = this.fields.map(f => {
         if (f === 'geometry') return 'location';
-        if (f === 'url')      return 'websiteURI';
+        if (f === 'url') return 'websiteURI';
         return f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
       });
-      await place.fetchFields({ fields: fieldsToRequest });
-  
-      const data = this.formatResult(place);
-  
-      const encoded = encodeURIComponent(fullText);
-      data.url = `https://maps.google.com/?q=${encoded}`;
-  
-      this.$emit('placechanged', data, place, this.id);
+      await place.fetchFields({ fields });
+      const encoded = encodeURIComponent(text);
+      place.url = `https://maps.google.com/?q=${encoded}`;
+      this.$emit('placechanged', this.formatResult(place), place, this.id);
     },
 
     onFocus() {

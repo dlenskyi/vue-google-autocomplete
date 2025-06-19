@@ -157,7 +157,7 @@ export default {
         console.warn('Нечего выбирать:', sugg);
         return;
       }
-
+  
       const pred = sugg.placePrediction;
       const fullText = pred.text.text;
       this.$emit('input', fullText);
@@ -166,21 +166,22 @@ export default {
       this.highlightedIndex = -1;
   
       const place = pred.toPlace();
-      const fieldsToRequest = this.fields.map(field => {
-        switch (field) {
-          case 'geometry':
-            return 'location';
-          case 'url':
-            return 'websiteURI';
-          default:
-            return field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-        }
-      });
-      await place.fetchFields({ fields: fieldsToRequest });
+  
+      const fieldsToRequest = this.fields
+        .map(field => {
+          if (field === 'geometry')   return 'location';
+          if (field === 'url')        return 'websiteURI';
+          return field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+        })
+        .concat(['id'])
+        .filter((f, i, arr) => arr.indexOf(f) === i);
+  
+      await place.fetchFields({ fields: fieldsToRequest });  
   
       const data = this.formatResult(place);
   
-      data.googleMapsUrl = place.googleMapsLinks?.placeUri || '';
+      //    https://www.google.com/maps/search/?api=1&query_place_id=PLACE_ID :contentReference[oaicite:1]{index=1}
+      data.googleMapsUrl = `https://www.google.com/maps/search/?api=1&query_place_id=${place.id}`;
   
       this.$emit('placechanged', data, place, this.id);
     },

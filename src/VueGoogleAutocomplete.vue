@@ -153,12 +153,14 @@ export default {
     },
 
     async select(sugg) {
-      if (!sugg || !sugg.placePrediction) {
-        console.warn('Нечего выбирать:', sugg);
+      if (!sugg?.placePrediction) {
+        console.warn('nothing to select:', sugg);
         return;
       }
   
       const pred = sugg.placePrediction;
+      const placeId = pred.placeId;
+  
       const fullText = pred.text.text;
       this.$emit('input', fullText);
   
@@ -166,22 +168,17 @@ export default {
       this.highlightedIndex = -1;
   
       const place = pred.toPlace();
-  
-      const fieldsToRequest = this.fields
-        .map(field => {
-          if (field === 'geometry')   return 'location';
-          if (field === 'url')        return 'websiteURI';
-          return field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-        })
-        .concat(['id'])
-        .filter((f, i, arr) => arr.indexOf(f) === i);
-  
-      await place.fetchFields({ fields: fieldsToRequest });  
+      const fieldsToRequest = this.fields.map(f => {
+        if (f === 'geometry')   return 'location';
+        if (f === 'url')        return 'websiteURI';
+        return f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+      });
+      await place.fetchFields({ fields: fieldsToRequest });
   
       const data = this.formatResult(place);
   
-      //    https://www.google.com/maps/search/?api=1&query_place_id=PLACE_ID :contentReference[oaicite:1]{index=1}
-      data.googleMapsUrl = `https://www.google.com/maps/search/?api=1&query_place_id=${place.id}`;
+      data.googleMapsUrl =
+        `https://www.google.com/maps/search/?api=1&query_place_id=${placeId}`;
   
       this.$emit('placechanged', data, place, this.id);
     },

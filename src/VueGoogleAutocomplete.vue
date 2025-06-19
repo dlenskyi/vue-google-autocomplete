@@ -55,7 +55,7 @@ export default {
     placeholder: { type: String, default: 'Start typing' },
     disabled: { type: Boolean, default: false },
     country: { type: [String, Array], default: null },
-    fields: { type: Array, default: () => ['address_components', 'formatted_address', 'geometry', 'url', 'utc_offset_minutes'] },
+    fields: { type: Array, default: () => ['addressComponents', 'formattedAddress', 'geometry', 'googleMapsUri', 'utcOffsetMinutes'] },
     enableGeolocation: { type: Boolean, default: false },
     geolocationOptions: { type: Object, default: null }
   },
@@ -218,8 +218,8 @@ export default {
         out.latitude = place.location.lat();
         out.longitude = place.location.lng();
       }
-      out.formatted_address = place.formattedAddress || '';
-      out.url = place.websiteURI || '';
+      out.formattedAddress = place.formattedAddress || '';
+      out.url = place.googleMapsUri || place.websiteURI || '';
       return out;
     }
   }

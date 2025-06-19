@@ -26,10 +26,10 @@
         @click.prevent="select(sugg)"
       >
         <span class="main-text">
-          {{ sugg.placePrediction.text.mainText }}
+          {{ sugg.placePrediction.mainText.text }}
         </span>
-        <span v-if="sugg.placePrediction.text.secondaryText" class="secondary-text">
-          {{ sugg.placePrediction.text.secondaryText }}
+        <span v-if="sugg.placePrediction.secondaryText" class="secondary-text">
+          {{ sugg.placePrediction.secondaryText.text }}
         </span>
       </li>
     </ul>
@@ -50,6 +50,7 @@ const ADDRESS_COMPONENTS = {
 
 export default {
   name: 'VueGoogleAutocomplete',
+
   props: {
     value: { type: String, default: '' },
     id: { type: String, required: true },
@@ -61,6 +62,7 @@ export default {
     enableGeolocation: { type: Boolean, default: false },
     geolocationOptions: { type: Object, default: null }
   },
+
   data() {
     return {
       predictions: [],
@@ -70,6 +72,7 @@ export default {
       Place: null
     };
   },
+
   computed: {
     textValue: {
       get() {
@@ -81,12 +84,14 @@ export default {
       }
     }
   },
+
   async mounted() {
     const places = await window.google.maps.importLibrary('places');
     this.AutocompleteSuggestion = places.AutocompleteSuggestion;
     this.AutocompleteSessionToken = places.AutocompleteSessionToken;
     this.Place = places.Place;
   },
+
   methods: {
     onFocus() {
       this.$emit('focus');
@@ -143,7 +148,7 @@ export default {
     async select(sugg) {
       if (!sugg || !sugg.placePrediction) return;
       const pred = sugg.placePrediction;
-      const text = pred.text.text || pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : '');
+      const text = pred.text.text || pred.mainText.text + (pred.secondaryText ? ', ' + pred.secondaryText.text : '');
       this.$emit('input', text);
       this.predictions = [];
       this.highlightedIndex = -1;
@@ -208,34 +213,4 @@ export default {
   width: 20px;
   height: 20px;
   margin-right: 12px;
-  background-image: url("data:image/svg+xml;charset=UTF-8,<svg fill='%23666' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z'/><circle cx='12' cy='9' fill='%23fff' r='2.5'/></svg>");
-  background-size: 20px 20px;
-}
-.vue-google-autocomplete .main-text {
-  font-weight: 500;
-  font-size: 16px;
-  color: #202124;
-  margin-right: 4px;
-  flex-shrink: 0;
-}
-.vue-google-autocomplete .secondary-text {
-  font-size: 14px;
-  color: #5f6368;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-.vue-google-autocomplete .dropdown-item:hover,
-.vue-google-autocomplete .dropdown-item.active {
-  background-color: #f1f3f4;
-}
-.vue-google-autocomplete .dropdown-menu::after {
-  content: 'powered by Google';
-  display: block;
-  padding: 8px 16px;
-  font-size: 12px;
-  color: #70757a;
-  text-align: right;
-}
-</style>
+  background-image: url("data:image/svg+xml;charset=UTF-8,<svg fill='%23666' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M12 2C8.13 2 5 5.13…

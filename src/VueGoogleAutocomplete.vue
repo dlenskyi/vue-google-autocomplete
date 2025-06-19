@@ -12,7 +12,7 @@
       @blur="onBlur"
       @keydown.down.prevent="highlight(1)"
       @keydown.up.prevent="highlight(-1)"
-      @keydown.enter.prevent="selectHighlighted"
+      @keydown.enter="onEnter"
     />
     <ul
       v-if="predictions.length"
@@ -90,6 +90,13 @@ export default {
   },
 
   methods: {
+    async onEnter(e) {
+      if (this.predictions.length > 0 && this.highlightedIndex >= 0) {
+        e.preventDefault();
+        await this.selectHighlighted();
+      }
+    },
+    
     focus() {
       this.$refs.autocomplete && this.$refs.autocomplete.focus();
     },
@@ -139,6 +146,9 @@ export default {
     async selectHighlighted() {
       if (this.highlightedIndex >= 0) {
         await this.select(this.predictions[this.highlightedIndex]);
+        // после удачного select очистим и predictions, и highlightedIndex
+        this.predictions = [];
+        this.highlightedIndex = -1;
       }
     },
 

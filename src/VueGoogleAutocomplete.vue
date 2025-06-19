@@ -214,7 +214,7 @@ export default {
         out.longitude = place.location.lng();
       }
       out.formattedAddress = place.formattedAddress || '';
-      out.url = place.googleMapsUri || place.websiteURI || '';
+      out.url = place.url || place.googleMapsUri || place.websiteURI || '';
       return out;
     }
   }

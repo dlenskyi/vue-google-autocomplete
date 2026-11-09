@@ -66,7 +66,8 @@ export default {
       highlightedIndex: -1,
       AutocompleteSuggestion: null,
       AutocompleteSessionToken: null,
-      Place: null
+      Place: null,
+      sessionToken: null
     };
   },
 
@@ -110,8 +111,11 @@ export default {
         return;
       }
     
-      const sessionToken = new this.AutocompleteSessionToken();
-      const req = { input: query, sessionToken };
+      // One token from the first keystroke to the chosen place: Google bills the whole session once.
+      if (!this.sessionToken) {
+        this.sessionToken = new this.AutocompleteSessionToken();
+      }
+      const req = { input: query, sessionToken: this.sessionToken };
     
       if (this.country) {
         // Нормализуем массив кодов в верхний регистр
@@ -165,7 +169,11 @@ export default {
         if (f === 'url') return 'websiteURI';
         return f.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
       });
-      await place.fetchFields({ fields });
+      try {
+        await place.fetchFields({ fields });
+      } finally {
+        this.sessionToken = null;
+      }
       const encoded = encodeURIComponent(text);
       place.url = `https://maps.google.com/?q=${encoded}`;
       this.$emit('placechanged', this.formatResult(place), place, this.id);

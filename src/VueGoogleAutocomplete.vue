@@ -67,7 +67,8 @@ export default {
       AutocompleteSuggestion: null,
       AutocompleteSessionToken: null,
       Place: null,
-      sessionToken: null
+      sessionToken: null,
+      latestQuery: null
     };
   },
 
@@ -106,6 +107,7 @@ export default {
     },
 
     async fetchSuggestions(query) {
+      this.latestQuery = query;
       if (!query || !this.AutocompleteSuggestion) {
         this.predictions = [];
         return;
@@ -131,9 +133,12 @@ export default {
       try {
         const { suggestions } =
           await this.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
+        // Answers can arrive out of order; only the one for the text in the field is shown.
+        if (query !== this.latestQuery) return;
         this.predictions     = suggestions;
         this.highlightedIndex = -1;
       } catch (e) {
+        if (query !== this.latestQuery) return;
         console.error("AutocompleteSuggestion error", e);
         this.predictions = [];
       }
@@ -161,6 +166,7 @@ export default {
       const pred = sugg.placePrediction;
       const text = pred.text.text || (pred.text.mainText + (pred.text.secondaryText ? ', ' + pred.text.secondaryText : ''));
       this.$emit('input', text);
+      this.latestQuery = null;
       this.predictions = [];
       this.highlightedIndex = -1;
       const place = pred.toPlace();
@@ -185,7 +191,10 @@ export default {
     },
 
     onBlur() {
-      setTimeout(() => (this.predictions = []), 200);
+      setTimeout(() => {
+        this.latestQuery = null;
+        this.predictions = [];
+      }, 200);
       this.$emit('blur');
     },
 
